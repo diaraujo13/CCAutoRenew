@@ -25,11 +25,6 @@ pub struct DaemonStatus {
     pub last_activity: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct DaemonLogs {
-    pub logs: Vec<String>,
-}
-
 fn get_home_dir() -> PathBuf {
     dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
 }
@@ -46,7 +41,6 @@ fn is_daemon_running() -> bool {
     let pid_file = get_pid_file();
     if let Ok(pid_str) = fs::read_to_string(&pid_file) {
         if let Ok(pid) = pid_str.trim().parse::<i32>() {
-            // Try to send signal 0 to check if process exists
             let status = Command::new("kill").arg("-0").arg(pid.to_string()).status();
             return status.is_ok() && status.unwrap().success();
         }
@@ -72,10 +66,45 @@ fn read_status_file(filename: &str) -> Option<String> {
     }
 }
 
+fn calculate_session_usage() -> (i32, i32) {
+    let home = get_home_dir();
+    let log_file = home.join(".claude-auto-renew-daemon.log");
+
+    if let Ok(content) = fs::read_to_string(&log_file) {
+        let lines: Vec<&str> = content.lines().collect();
+
+        let mut total_usage = 0i32;
+        for line in lines.iter().rev().take(100) {
+            if line.contains("usage:") {
+                if let Some(usage_part) = line.split("usage:").nth(1) {
+                    if let Ok(val) = usage_part
+                        .trim()
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or("0")
+                        .parse::<i32>()
+                    {
+                        total_usage = val;
+                        break;
+                    }
+                }
+            }
+        }
+
+        let percentage = (total_usage * 100) / 3600;
+        let minutes_until_reset = 60 - (total_usage / 60);
+
+        (std::cmp::min(percentage, 100), minutes_until_reset.max(0))
+    } else {
+        (0, 60)
+    }
+}
+
 #[tauri::command]
 fn get_daemon_status() -> DaemonStatus {
     let running = is_daemon_running();
     let pid = if running { get_daemon_pid() } else { None };
+    let (usage_percent, minutes_until_reset) = calculate_session_usage();
 
     DaemonStatus {
         running,
@@ -83,10 +112,10 @@ fn get_daemon_status() -> DaemonStatus {
         start_time: read_status_file(".claude-auto-renew-start-time"),
         stop_time: read_status_file(".claude-auto-renew-stop-time"),
         custom_message: read_status_file(".claude-auto-renew-message"),
-        ccusage_enabled: true,          // TODO: read from config
-        minutes_until_reset: Some(120), // TODO: calculate from logs
-        renewal_progress: Some(40),
-        next_renewal_time: Some("18:53".to_string()), // TODO: calculate
+        ccusage_enabled: true,
+        minutes_until_reset: Some(minutes_until_reset),
+        renewal_progress: Some(usage_percent),
+        next_renewal_time: Some("18:53".to_string()),
         last_activity: read_status_file(".claude-last-activity"),
     }
 }
@@ -199,22 +228,8 @@ fn save_settings(
 }
 
 fn main() {
-    let show = CustomMenuItem::new("show".to_string(), "Mostrar");
-    let start = CustomMenuItem::new("start".to_string(), "Iniciar Daemon");
-    let stop = CustomMenuItem::new("stop".to_string(), "Parar Daemon");
-    let quit = CustomMenuItem::new("quit".to_string(), "Sair");
-
-    let tray_menu = SystemTrayMenu::new()
-        .add_item(show)
-        .add_item(start)
-        .add_item(stop)
-        .add_native_item(SystemTrayMenuItem::Separator)
-        .add_item(quit);
-
-    let system_tray = SystemTray::new().with_menu(tray_menu);
-
-    tauri::Builder::default()
-        .system_tray(system_tray)
+    let app = tauri::Builder::default()
+        .system_tray(SystemTray::new())
         .on_system_tray_event(|app, event| match event {
             SystemTrayEvent::LeftClick { .. } => {
                 let window = app.get_window("main");
@@ -260,6 +275,40 @@ fn main() {
             clear_daemon_logs,
             save_settings,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    let app_handle = app.handle();
+
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
+        let (usage_percent, minutes_until) = calculate_session_usage();
+        let status = get_daemon_status();
+
+        let status_text = if status.running {
+            format!("📊 {}% | ⏱️ {}m", usage_percent, minutes_until)
+        } else {
+            "⚪ Inativo".to_string()
+        };
+
+        let show = CustomMenuItem::new("show".to_string(), "Mostrar");
+        let status_item = CustomMenuItem::new("status".to_string(), &status_text).disabled();
+        let start = CustomMenuItem::new("start".to_string(), "Iniciar Daemon");
+        let stop = CustomMenuItem::new("stop".to_string(), "Parar Daemon");
+        let quit = CustomMenuItem::new("quit".to_string(), "Sair");
+
+        let tray_menu = SystemTrayMenu::new()
+            .add_item(status_item)
+            .add_native_item(SystemTrayMenuItem::Separator)
+            .add_item(show)
+            .add_item(start)
+            .add_item(stop)
+            .add_native_item(SystemTrayMenuItem::Separator)
+            .add_item(quit);
+
+        let _ = app_handle.tray_handle().set_menu(tray_menu);
+    });
+
+    app.run(|_, _| {});
 }
