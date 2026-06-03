@@ -28,7 +28,22 @@
         "height": 520,
         "resizable": false,
         "visible": false,
-        "decorations": true
+        "decorations": true,
+        "label": "main"
+      },
+      {
+        "title": "Status",
+        "width": 150,
+        "height": 28,
+        "x": 100,
+        "y": 10,
+        "resizable": false,
+        "visible": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "transparent": false,
+        "label": "status"
       }
     ],
     "security": {
