@@ -203,9 +203,9 @@ start_claude_session() {
         selected_message="${messages[$random_index]}"
     fi
     
-    # Simple approach - macOS compatible
-    # Use a subshell with background process for timeout
-    (echo "$selected_message" | claude >> "$LOG_FILE" 2>&1) &
+    # Use Claude Code print mode so the renewal check does not depend on the
+    # interactive TUI prompt, which changes more often between CLI releases.
+    (claude -p --max-turns 1 --output-format text "$selected_message" >> "$LOG_FILE" 2>&1) &
     local pid=$!
     
     # Wait up to 10 seconds

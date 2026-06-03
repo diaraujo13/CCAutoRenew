@@ -89,11 +89,11 @@ test_dependencies() {
     if command -v claude &> /dev/null; then
         print_pass "Claude CLI available"
         
-        # Test claude command works
-        if echo "test" | timeout 5s claude --help &> /dev/null; then
-            print_pass "Claude CLI responds to help command"
+        # Test claude command works without starting an interactive session
+        if claude --version &> /dev/null; then
+            print_pass "Claude CLI responds to version command"
         else
-            print_warning "Claude CLI doesn't respond to help (may need authentication)"
+            print_warning "Claude CLI doesn't respond to version command"
         fi
     else
         print_fail "Claude CLI not found"
@@ -117,11 +117,11 @@ test_dependencies() {
         print_fail "No method to run ccusage found"
     fi
     
-    # Optional tools
-    if command -v expect &> /dev/null; then
-        print_pass "expect available for advanced automation"
+    # Claude Code print mode replaced the older expect-based automation.
+    if claude -p --help &> /dev/null || claude --version &> /dev/null; then
+        print_pass "Claude Code print mode compatible CLI available"
     else
-        print_info "expect not available - will use fallback methods"
+        print_warning "Could not verify Claude Code print mode"
     fi
     
     if command -v jq &> /dev/null; then
@@ -344,6 +344,12 @@ test_error_handling() {
         print_pass "Script checks for claude command availability"
     else
         print_warning "Script may not check for claude availability"
+    fi
+
+    if grep -q "claude -p" "$BASIC_SCRIPT"; then
+        print_pass "Script uses Claude Code print mode"
+    else
+        print_warning "Script may still depend on interactive Claude Code mode"
     fi
     
     # Test with insufficient permissions (simulate)

@@ -1,0 +1,24 @@
+[package]
+name = "claude-auto-renew"
+version = "1.0.0"
+description = "Claude Auto-Renew - Menubar app for managing your Claude Code renewal window"
+authors = ["you"]
+license = "MIT"
+repository = ""
+default-run = "claude-auto-renew"
+edition = "2021"
+rust-version = "1.57"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+tauri = { version = "1.5", features = ["shell-open", "system-tray", "window-close", "window-hide", "window-show"] }
+tokio = { version = "1", features = ["full"] }
+dirs = "5"
+
+[[bin]]
+name = "claude-auto-renew"
+path = "src/main.rs"

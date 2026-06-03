@@ -78,8 +78,9 @@ start_claude_session() {
         return 1
     fi
     
-    # Start claude with a simple command that exits immediately
-    echo "hi" | claude 2>&1 >> "$LOG_FILE"
+    # Start claude in print mode so this script does not depend on the
+    # interactive TUI prompt.
+    claude -p --max-turns 1 --output-format text "hi" >> "$LOG_FILE" 2>&1
     
     if [ $? -eq 0 ]; then
         log_message "Successfully started Claude session"

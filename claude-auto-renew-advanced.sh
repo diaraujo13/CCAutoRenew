@@ -114,58 +114,29 @@ start_claude_session() {
         return 1
     fi
     
-    # Create a temporary expect script for better automation
-    cat > /tmp/claude_auto_start.exp << 'EOF'
-#!/usr/bin/expect -f
-set timeout 10
-spawn claude
-expect {
-    ">" {
-        send "hi\r"
-        expect ">"
-        send "exit\r"
-    }
-    timeout {
-        send \003
-        exit 1
-    }
-}
-expect eof
-EOF
+    # Use Claude Code print mode so scripted renewals do not depend on the
+    # interactive TUI prompt or expect automation.
+    (claude -p --max-turns 1 --output-format text "hi" >> "$LOG_FILE" 2>&1) &
+    local pid=$!
     
-    chmod +x /tmp/claude_auto_start.exp
+    # Wait up to 10 seconds
+    local count=0
+    while kill -0 $pid 2>/dev/null && [ $count -lt 10 ]; do
+        sleep 1
+        ((count++))
+    done
     
-    # Try using expect if available
-    if command -v expect &> /dev/null; then
-        /tmp/claude_auto_start.exp >> "$LOG_FILE" 2>&1
-        local result=$?
+    # Kill if still running
+    if kill -0 $pid 2>/dev/null; then
+        kill $pid 2>/dev/null
+        wait $pid 2>/dev/null
+        local result=124
     else
-        # Fallback to simple echo with macOS-compatible timeout
-        (echo "hi" | claude >> "$LOG_FILE" 2>&1) &
-        local pid=$!
-        
-        # Wait up to 10 seconds
-        local count=0
-        while kill -0 $pid 2>/dev/null && [ $count -lt 10 ]; do
-            sleep 1
-            ((count++))
-        done
-        
-        # Kill if still running
-        if kill -0 $pid 2>/dev/null; then
-            kill $pid 2>/dev/null
-            wait $pid 2>/dev/null
-            local result=124
-        else
-            wait $pid
-            local result=$?
-        fi
+        wait $pid
+        local result=$?
     fi
-    
-    # Clean up
-    rm -f /tmp/claude_auto_start.exp
-    
-    if [ $result -eq 0 ]; then
+
+    if [ $result -eq 0 ] || [ $result -eq 124 ]; then
         log_message "Successfully started Claude session"
         date +%s > "$LAST_ACTIVITY_FILE"
         return 0

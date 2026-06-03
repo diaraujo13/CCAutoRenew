@@ -33,6 +33,10 @@ Claude Code operates on a 5-hour subscription model that renews from your first 
 
 ## 🚀 Quick Start
 
+### Recommended: Using LaunchAgent (macOS Native) ⭐
+
+The easiest way to get the daemon working 24/7, even when your Mac sleeps:
+
 ```bash
 # Clone the repository
 git clone https://github.com/aniketkarne/CCAutoRenew.git
@@ -41,15 +45,25 @@ cd CCAutoRenew
 # Make scripts executable
 chmod +x *.sh
 
-# Interactive setup (recommended)
-./setup-claude-cron.sh
+# Install as macOS LaunchAgent (one-time setup)
+./migrate-to-launchd.sh
 
-# OR manual daemon start
+# That's it! Daemon is now running and will survive sleep/wake cycles
+```
+
+### Alternative: Manual Background Daemon (Not Recommended)
+
+If you prefer the old method (note: daemon stops when Mac sleeps):
+
+```bash
+# Make scripts executable
+chmod +x *.sh
+
+# Start the background daemon
 ./claude-daemon-manager.sh start
 ./claude-daemon-manager.sh start --at "09:00"  # with start time
 ./claude-daemon-manager.sh start --at "09:00" --stop "17:00"  # with start/stop times
 ./claude-daemon-manager.sh start --message "continue working on my project"  # with custom message
-./claude-daemon-manager.sh start --at "09:00" --stop "17:00" --disableccusage  # clock-only mode
 ```
 
 That's it! The daemon will now run in the background and automatically renew your Claude sessions.
@@ -60,14 +74,88 @@ That's it! The daemon will now run in the background and automatically renew you
 - Bash 4.0+ (pre-installed on macOS/Linux)
 - (Optional) [ccusage](https://github.com/ryoppippi/ccusage) for precise timing
 
+## 🎯 Why LaunchAgent? (The Fix for the Sleep Problem)
+
+### The Problem You Experienced
+
+You said: *"My MacBook was on since 3am, the renewal was blocked from 3-8am, then 8-13 was not successful, only when I TOUCHED the pc at 10:40 did it start working."*
+
+**What was happening:**
+- ✗ Background daemon was suspended when Mac slept
+- ✗ Even though daemon process existed, it wasn't running
+- ✓ When you touched the Mac, it woke up and resumed the daemon
+
+### The Solution: LaunchAgent
+
+LaunchAgent is macOS's native way to run background services. Unlike a simple background process:
+
+| Feature | Background Daemon | LaunchAgent |
+|---------|-------------------|-------------|
+| Survives Mac sleep | ❌ No | ✅ Yes |
+| Auto-starts at login | ❌ No | ✅ Yes |
+| Auto-restarts on crash | ❌ No | ✅ Yes |
+| Runs 24/7 reliably | ❌ No | ✅ Yes |
+| Requires user input | ❌ Some | ✅ None |
+
+### Migration Steps
+
+1. **One-time setup:**
+   ```bash
+   ./migrate-to-launchd.sh
+   ```
+
+2. **Restart your Mac** (optional, but recommended to verify it auto-starts)
+
+3. **Done!** The daemon now:
+   - Starts automatically at login
+   - Continues running even when Mac sleeps
+   - Automatically restarts if it crashes
+   - Works 24/7 without interruption
+
+### Managing LaunchAgent
+
+```bash
+# Check status
+./manage-launchd.sh status
+
+# View logs
+./manage-launchd.sh logs
+./manage-launchd.sh logs -f  # Follow in real-time
+
+# Control daemon
+./manage-launchd.sh stop     # Stop temporarily
+./manage-launchd.sh start    # Start again
+./manage-launchd.sh restart  # Restart
+
+# Remove if needed
+./manage-launchd.sh uninstall
+```
+
 ## 🔧 Installation
 
 ### 1. Install Claude CLI
 
 First, ensure you have Claude Code installed:
 ```bash
-# Follow the official installation guide
-    # https://www.anthropic.com/claude-code
+# Native installer, recommended by Anthropic
+curl -fsSL https://claude.ai/install.sh | bash
+
+# Verify and authenticate
+claude --version
+claude auth status --text || claude auth login
+```
+
+To update an existing Claude Code install:
+
+```bash
+# Native install
+claude update
+
+# Or reinstall the latest native binary
+claude install latest
+
+# If you installed via npm instead
+npm install -g @anthropic-ai/claude-code@latest
 ```
 
 ### 2. Install ccusage (Optional but Recommended)
@@ -384,8 +472,8 @@ grep "ccusage DISABLED" ~/.claude-auto-renew-daemon.log
 # Verify Claude CLI is installed
 which claude
 
-# Test Claude directly
-echo "hi" | claude
+# Test Claude directly without opening the interactive UI
+claude -p --max-turns 1 "hi"
 ```
 
 ## 🤝 Contributing

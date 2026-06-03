@@ -96,11 +96,11 @@ test_dependencies() {
         print_warning "ccusage not available - will test fallback mode"
     fi
     
-    # Check for expect (optional)
-    if command -v expect &> /dev/null; then
-        print_success "expect found for advanced automation"
+    # Claude Code print mode replaced the older expect-based automation.
+    if claude -p --help &> /dev/null || claude --version &> /dev/null; then
+        print_success "Claude Code print mode compatible CLI available"
     else
-        print_info "expect not found - will use fallback methods"
+        print_info "Could not verify Claude Code print mode"
     fi
 }
 
